@@ -1,0 +1,5 @@
+LARK_HOST="https://open.feishu.cn"
+TENANT_ACCESS_TOKEN_URI = "/open-apis/auth/v3/tenant_access_token/internal"
+USER_ACCESS_TOKEN_URI = "/open-apis/authen/v1/access_token"
+MESSAGE_URI = "/open-apis/im/v1/messages"
+DOCS_CREATE_URI = "/open-apis/doc/v2/create/"
