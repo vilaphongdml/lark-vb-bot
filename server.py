@@ -4,11 +4,13 @@ import os
 import logging
 import requests
 from lark_api.bot_message.api import MessageApiClient
-from lark_api.docs.api import create_startup_pitching_document
+from lark_api.docs.api import create_startup_pitching_document, add_document_user_permission, create_docs
+from lark_api.base.utils import update_pitching_document
 from event import MessageReceiveEvent, UrlVerificationEvent, EventManager, UserAndBotChatCreateEvent
 from flask import Flask, jsonify
 from dotenv import load_dotenv, find_dotenv
-from constants import startup_registration_form, investor_registration_form, get_docs_redirection_form
+from constants import startup_registration_form, investor_registration_form, get_docs_redirection_form,\
+    successful_registration_form, get_recent_news, news_template, get_create_news_card
 import json
 
 # load env parameters form file named .env
@@ -45,17 +47,69 @@ def message_receive_event_handler(req_data: MessageReceiveEvent):
         return jsonify()
         # get open_id and text_content
     open_id = sender_id.open_id
+    print("open_id")
+    print(open_id)
     message = message.content
     # echo text message
     if 'startup registration form' in message.lower():
         message = startup_registration_form
-        message_api_client.send_message_with_open_id(open_id, 'interactive', json.dumps(message))
+        response = message_api_client.send_message_with_open_id(open_id, 'interactive', json.dumps(message))
+        
+        ## FOR RECORDING ONLY
+        import time
+        time.sleep(5)
+        # update startup registration form
+        updated_registration_card = json.dumps(successful_registration_form)
+        message_api_client.update_message(updated_registration_card)
+        # create documents
+        create_docs_response = create_startup_pitching_document(open_id)
+        create_docs_response_json = json.loads(create_docs_response.content.decode('utf-8'))
+        docs_url = create_docs_response_json['data']['url']
+        docs_token = create_docs_response_json['data']['objToken']
+        # update document permission
+        add_document_user_permission(docs_token, open_id, 'full_access')
+        # update pitching document url in base
+        message_api_client.send_message_with_open_id(open_id, 'interactive', json.dumps(get_docs_redirection_form(docs_url)))
+
     elif 'investor registration form' in message.lower():
         message = investor_registration_form
         message_api_client.send_message_with_open_id(open_id, 'interactive', json.dumps(message))
+        
+        ## FOR RECORDING ONLY
+        import time
+        time.sleep(6)
+        # update startup registration form
+        updated_registration_card = json.dumps(successful_registration_form)
+        message_api_client.update_message(updated_registration_card)
+
+        message = "{\"text\":\"Thank you for your joining us! Here are recent news of the industries you subscribed that you might be interested in.\"}"
+        message_api_client.send_message_with_open_id(open_id, 'text', message)
+
+        # send recent news
+        recent_news = get_recent_news()
+        for news in recent_news:
+            message_api_client.send_message_with_open_id(open_id, 'interactive', json.dumps(news))
+    
+    elif 'create a news' in message.lower():
+        create_docs_response = create_docs(json.dumps(news_template))
+        create_docs_response_json = json.loads(create_docs_response.content.decode('utf-8'))
+        print(create_docs_response_json)
+        docs_url = create_docs_response_json['data']['url']
+        message = get_create_news_card(docs_url)
+        message_api_client.send_message_with_open_id(open_id, 'interactive', json.dumps(message))
+
     elif 'registered' in message.lower():
-        create_docs_response = create_startup_pitching_document('open_id', open_id)
-        docs_url = json.loads(create_docs_response.content.decode('utf-8'))['data']['url']
+        # update startup registration form
+        updated_registration_card = json.dumps(successful_registration_form)
+        message_api_client.update_message(updated_registration_card)
+        # create documents
+        create_docs_response = create_startup_pitching_document(open_id)
+        create_docs_response_json = json.loads(create_docs_response.content.decode('utf-8'))
+        docs_url = create_docs_response_json['data']['url']
+        docs_token = create_docs_response_json['data']['objToken']
+        # update document permission
+        add_document_user_permission(docs_token, open_id, 'full_access')
+        # update pitching document url in base
         message_api_client.send_message_with_open_id(open_id, 'interactive', json.dumps(get_docs_redirection_form(docs_url)))
     else:
         message_api_client.send_message_with_open_id(open_id, 'text', "Sorry, I can't comphrend your message. :<")
@@ -83,8 +137,6 @@ def msg_error_handler(ex):
 def callback_event_handler():
     # init callback instance and handle
     event_handler, event = event_manager.get_handler_with_event(VERIFICATION_TOKEN, ENCRYPT_KEY)
-    print(event)
-    print(event_handler)
 
     return event_handler(event)
 

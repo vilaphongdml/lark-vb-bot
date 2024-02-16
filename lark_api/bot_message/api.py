@@ -16,6 +16,7 @@ class MessageApiClient(object):
         self._app_secret = app_secret
         self._lark_host = lark_host
         self._tenant_access_token = ""
+        self._latest_message_id = ""
 
     @property
     def tenant_access_token(self):
@@ -40,15 +41,26 @@ class MessageApiClient(object):
             "content": content,
             "msg_type": msg_type,
         }
-        print(req_body)
         resp = requests.post(url=url, headers=headers, json=req_body)
-        print("response")
-        print(resp.content)
+        self._latest_message_id = resp.json()["data"]["message_id"]
+        MessageApiClient._check_error_response(resp)
+
+    def update_message(self, updated_message):
+        self._authorize_tenant_access_token()
+        url = f'{self._lark_host}{MESSAGE_URI}/{self._latest_message_id}'
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + self.tenant_access_token,
+        }
+        req_body = {
+            "content": updated_message
+        }
+        resp = requests.patch(url=url, headers=headers, json=req_body)
         MessageApiClient._check_error_response(resp)
 
     def _authorize_tenant_access_token(self):
         # get tenant_access_token and set, implemented based on Feishu open api capability. doc link: https://open.feishu.cn/document/ukTMukTMukTM/ukDNz4SO0MjL5QzM/auth-v3/auth/tenant_access_token_internal
-        response = authorize_tenant_access_token(self._app_id, self._app_secret)
+        response = authorize_tenant_access_token()
         MessageApiClient._check_error_response(response)
         self._tenant_access_token = response.json().get("tenant_access_token")
 
